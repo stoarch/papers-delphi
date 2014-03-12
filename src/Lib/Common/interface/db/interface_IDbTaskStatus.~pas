@@ -1,0 +1,19 @@
+unit interface_IDbTaskStatus;
+
+interface
+
+const
+  IID_IDbTaskStatus : TGUID = '{E820DF0D-FE84-4CB3-A828-449EC5A3FD28}';
+
+type
+  IDbTaskStatus = interface
+                  ['{E820DF0D-FE84-4CB3-A828-449EC5A3FD28}']
+
+    procedure setDbName( dbName : string );
+    procedure setTaskName( dbTaskName : string );
+  end;//interface
+
+implementation
+
+end.
+ 

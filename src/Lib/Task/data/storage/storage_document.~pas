@@ -1,0 +1,369 @@
+unit storage_document;
+
+interface
+  uses
+    //--[ class factories ]--
+    paperwork_classFactory,
+    //--[ common ]--
+    classes, sysUtils, myAccess,
+    //--[ constants ]--
+    const_DocumentAttachmentStorage,
+    const_string,
+    //--[ interfaces ]--
+    interface_document,
+    interface_documentAttachment,
+    interface_documentAttachmentStorage,
+    interface_documentStorage,
+    //--[ factories ]--
+    factory_documents,
+    //--[ pools ]--
+    pool_query,
+    //--[ tools ]--
+    tool_Environment
+    ;
+
+  type
+    TSQL_DocumentStorage = class( TInterfacedObject, IDocumentStorage )
+      constructor Create();
+      destructor Destroy();override;
+
+      function add( document : IDocument ) : boolean;
+      function add_copy( document : IDocument ) : boolean;
+      procedure delete( index : integer );
+
+      procedure update( document : IDocument );
+      procedure fast_update( document : IDocument );
+
+      function get_user_id() : integer;
+      procedure set_user_id( value : integer );
+
+      //--[ properties ]--
+      property user_id : integer read get_user_id write set_user_id;
+
+     private
+      m_attachment_storage : IDocumentAttachmentStorage;
+      Fuser_id             : integer;
+
+      procedure store_document_attachments(document: IDocument);
+      procedure update_document_attachments_in_db( document : IDocument );
+      procedure clear;
+      function compress(content: string): string;
+      procedure update_document_is_readen(isReaden: boolean; doc_ind,
+      user_ind: integer);
+      procedure add_document_is_readen(isReaden: boolean; doc_ind, user_ind: integer);
+
+       procedure execSQL(sql: string);
+       function is_readen_document_by(doc_ind, user_ind: integer): boolean;
+       function add_document(document: IDocument): boolean;
+    procedure copy_document_attachments(document: IDocument);
+    end;//class
+
+implementation
+   uses
+     //--[ string processing ]--
+     jclMime,
+     //--[ compress ]--
+     jclZlib
+     , interface_userInfoList, interface_userInfo, DB;
+
+
+{ TSQL_DocumentStorage }
+
+function TSQL_DocumentStorage.compress( content : string ) : string;
+begin
+  result := MimeEncodeString( content );
+end;
+
+
+function TSQL_DocumentStorage.add_document( document : IDocument ) : boolean;
+  var
+    work_query : TMyQuery;
+begin
+  result := false;
+
+  work_query := QueryPool.capture_query();
+  try
+    try
+      work_query.SQL.Clear();
+      work_query.SQL.Add(
+        'insert into paperwork.documents ' +
+        '(from_user, doc_kind, doc_sub_kind, caption, make_date, content, flag, doc_state, owner_id, to_user, pipe_ind, send_date, answer_date ) ' +
+        'values (' +
+           IntToStr( document.from_user.user_index ) + ',' +
+           IntToStr( ord( document.kind ) ) + ',' +
+           IntToStr( ord( document.document_kind ) ) + ',' +
+           '"' + document.caption + '",' +
+           '"' + FormatDateTime( 'yyyy-mm-dd hh:nn:ss', document.make_date ) + '",' +
+           '"' + Compress( document.content ) + '",' +
+           IntToStr( ord( document.flag )) + ',' +
+           IntToStr( Ord( document.state )) + ',' +
+           IntToStr( document.owner_id ) + ',' +
+           IntToStr( document.to_user.user_index ) + ',' +
+           IntToStr( document.pipe_ind ) + ',' +
+           '"' + FormatDateTime( 'yyyy-mm-dd hh:nn:ss', document.send_date ) + '",' +
+           '"' + FormatDateTime( 'yyyy-mm-dd hh:nn:ss', document.answer_date ) + '"' +
+        ')'
+       );
+      work_query.Execute();
+
+      //and fill the document index from result value
+      work_query.SQL.Clear();
+      work_query.SQL.Add(
+        'select max(key_ind) as code from paperwork.documents'
+      );
+      work_query.Open();
+
+      document.doc_ind := work_query.fieldByName( 'code' ).asInteger;
+
+      add_document_is_readen( document.isReaden, document.doc_ind, Fuser_id );
+    except
+      exit;
+    end;//try-except
+
+    result := true;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;//proc
+
+function TSQL_DocumentStorage.add(document: IDocument): boolean;
+begin
+  result := false;
+
+  if add_document( document ) then
+  begin
+    store_document_attachments( document );
+    result := true;
+  end;//if
+end;
+
+constructor TSQL_DocumentStorage.Create;
+begin
+  inherited;
+  m_attachment_storage := documents_factory.createInstance(
+                         CLSID_DocumentAttachmentStorage,
+                         IID_IDocumentAttachmentStorage
+                        )
+                          as IDocumentAttachmentStorage;
+end;
+
+destructor TSQL_DocumentStorage.Destroy;
+begin
+  clear();
+
+  m_attachment_storage := nil;
+  inherited;
+end;
+
+procedure TSQL_DocumentStorage.clear();
+begin
+  //todo: implement clearing of documents
+end;
+
+procedure TSQL_DocumentStorage.store_document_attachments( document : IDocument );
+  var
+    i : integer;
+    attachment : IDocumentAttachment;
+    file_name  : string;
+begin
+  if( document.attachment_list.Count = 0 )then exit;
+
+  m_attachment_storage.document := document;
+
+  //store in db
+  for i := 0 to document.attachment_list.Count - 1 do
+  begin
+    attachment := document.attachment_list.Attachments[ i ];
+    file_name  := ExtractFileName( attachment.doc_file );
+    attachment.urn := Environment.get_string( c_ATTACHMENT_DIR ) + file_name + Environment.get_string( c_ATTACHMENT_EXT );
+
+    m_attachment_storage.add( attachment );
+  end;//for
+end;
+
+procedure TSQL_DocumentStorage.update(document: IDocument);
+begin
+  fast_update( document );
+
+  update_document_attachments_in_db( document );
+end;
+
+
+procedure TSQL_DocumentStorage.update_document_attachments_in_db( document : IDocument );
+begin
+  m_attachment_storage.document := document;
+
+  m_attachment_storage.clear();
+
+  store_document_attachments( document );
+end;
+
+procedure TSQL_DocumentStorage.update_document_is_readen( isReaden : boolean; doc_ind, user_ind : integer );
+  var
+    work_query : TMyQuery;
+begin
+  assert( user_ind <> 0, 'User must be specified' );
+
+  work_query := QueryPool.capture_query();
+  try
+    if( not is_readen_document_by( doc_ind, user_ind ) )then
+      begin
+        add_document_is_readen( true, doc_ind, user_ind )
+      end
+    else
+      begin
+        work_query.sql.clear();
+        work_query.sql.add(
+          'update doc_status set status =  ' + IntToStr( ord(isReaden) ) + //1 = document is readen
+          ' where   doc_ind  = ' + intToStr( doc_ind ) +
+          '    and  user_ind = ' + intToStr( user_ind )
+        );
+        work_query.execSql();
+      end;//if-else
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+function TSQL_DocumentStorage.is_readen_document_by( doc_ind, user_ind : integer ): boolean;
+  var
+    work_query : TMyQuery;
+begin
+
+  work_query := QueryPool.capture_query();
+  try
+    work_query.sql.clear();
+    work_query.sql.add(
+      'select * from doc_status ' +
+      ' where   doc_ind  = ' + intToStr( doc_ind ) +
+      '    and  user_ind = ' + intToStr( user_ind )
+    );
+    work_query.open();
+
+    result := work_query.RecordCount > 0;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;//function
+
+procedure TSQL_DocumentStorage.add_document_is_readen( isReaden : boolean; doc_ind, user_ind : integer );
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    work_query.sql.clear();
+    work_query.sql.add(
+      'insert into doc_status ( doc_ind, user_ind, status ) values (   '
+      + intToStr( doc_ind ) + ','
+      + intToStr( user_ind ) + ','
+      + IntToStr( ord(isReaden) )
+      + ')'
+    );
+    work_query.execSql();
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+
+
+procedure TSQL_DocumentStorage.fast_update(document: IDocument);
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    work_query.sql.clear();
+    work_query.SQL.add(
+      'update documents set ' +
+      'flag = ' + IntToStr( Ord( document.flag ) ) + ',' +
+      'from_user = ' + IntToStr( document.from_user.user_index ) + ',' +
+      'to_user = '   + IntToStr( document.to_user.user_index ) + ',' +
+      'make_date = "' + FormatDateTime('yyyy-mm-dd hh:nn:ss', document.make_date ) + '",' +
+      'doc_kind  = '  + IntToStr( Ord( document.kind )  ) + ',' +
+      'caption   = "' + document.caption + '",' +
+      'content   = "' + Compress( document.content ) + '",' +
+      'doc_sub_kind = ' + IntToStr( Ord( document.document_kind )) + ',' +
+      'doc_state    = ' + IntToStr( Ord( document.state )) + ',' +
+      'owner_id     = ' + IntToStr( document.owner_id ) + ',' +
+      'pipe_ind     = ' + IntToStr( document.pipe_ind ) + ',' +
+      'send_date    = ' + '"' + FormatDateTime( 'yyyy-mm-dd hh:nn:ss', document.send_date ) + '",' +
+      'answer_date    = ' + '"' + FormatDateTime( 'yyyy-mm-dd hh:nn:ss', document.answer_date ) + '"' +
+      ' where key_ind = ' + IntToStr( document.doc_ind )
+    );
+    work_query.execSQL();
+
+    m_attachment_storage.document := Document;
+
+    update_document_is_readen( document.isReaden, document.doc_ind, Fuser_id );
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+procedure TSQL_DocumentStorage.delete(index: integer);
+ var
+   str_ind : string;
+begin
+  str_ind := intToStr( index );
+
+  execSQL( 'delete from documents where key_ind = ' + str_ind );
+  execSQL( 'delete from attachments where doc_ind = ' + str_ind );
+  execSQL( 'delete from doc_status where doc_ind = ' + str_ind );
+end;//proc
+
+procedure TSQL_DocumentStorage.execSQL( sql : string );
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    work_query.SQL.clear();
+    work_query.sql.add( sql );
+    work_query.ExecSQL();
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+
+function TSQL_DocumentStorage.get_user_id: integer;
+begin
+ result := Fuser_id;
+end;
+
+procedure TSQL_DocumentStorage.set_user_id(value: integer);
+begin
+  Fuser_id := value;
+end;
+
+function TSQL_DocumentStorage.add_copy(document: IDocument): boolean;
+begin
+ result := false ;
+ if( add_document( document ))then
+  begin
+    copy_document_attachments( document );
+    result := true;
+  end;//if
+end;
+
+procedure TSQL_DocumentStorage.copy_document_attachments( document : IDocument );
+  var
+    i : integer;
+    attachment : IDocumentAttachment;
+begin
+  if( document.attachment_list.Count = 0 )then exit;
+
+  m_attachment_storage.document := document;
+
+  //store in db
+  for i := 0 to document.attachment_list.Count - 1 do
+  begin
+    attachment := document.attachment_list.Attachments[ i ];
+
+    m_attachment_storage.add_copy( attachment );
+  end;//for
+end;//proc
+
+end.

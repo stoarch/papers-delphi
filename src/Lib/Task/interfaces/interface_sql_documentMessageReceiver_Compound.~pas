@@ -1,0 +1,35 @@
+unit interface_sql_documentMessageReceiver_Compound;
+
+interface
+  uses
+    //--[ common ]--
+    classes,
+    //--[ interfaces ]--
+    interface_compoundMessage,
+    interface_sql_documentMessageReceiver,
+    //--[ types ]--
+    type_Message
+    ;
+
+  const
+    IID_Isql_documentMessageReceiver_Compound : TGUID = '{B307A7A6-B20D-4CAB-931D-5605E72667ED}';
+
+  type
+    Isql_documentMessageReceiver_Compound = interface( Isql_documentMessageReceiver )
+                                   ['{B307A7A6-B20D-4CAB-931D-5605E72667ED}']
+      //--[ accessors ]--
+      function get_compound_msg() : ICompoundMessage;
+      function get_message_filler( kind : TMessageKind ) : IMessageFiller;
+
+      //--[ mutators ]--
+      procedure set_compound_msg( value : ICompoundMessage );
+      procedure set_message_filler( kind : TMessageKind; const filler : TMessageFiller );
+
+      //--[ properties ]--
+      property CompoundMessage : ICompoundMessage read get_compound_msg write set_compound_msg;
+      property MessageFiller[ kind : TMessageKind ]   : IMessageFiller   read get_message_filler write set_message_filler;
+    end;//interface
+
+implementation
+
+end.

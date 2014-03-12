@@ -1,0 +1,6 @@
+[source]
+file name=Terminal.exe
+directory=P:\updates
+
+[destination]
+directory=c:\paperwork

@@ -1,0 +1,272 @@
+object paperwork_dm: Tpaperwork_dm
+  OldCreateOrder = False
+  Left = 263
+  Top = 139
+  Height = 427
+  Width = 505
+  object main_connection: TZConnection
+    Protocol = 'mysql'
+    HostName = '192.168.10.1'
+    Port = 0
+    Database = 'paperwork'
+    User = 'root'
+    Password = '1'
+    AutoCommit = True
+    ReadOnly = False
+    TransactIsolationLevel = tiNone
+    Connected = True
+    SQLHourGlass = False
+    Left = 30
+    Top = 9
+  end
+  object users_table: TZTable
+    Connection = main_connection
+    OnCalcFields = users_tableCalcFields
+    RequestLive = True
+    CachedUpdates = False
+    TableName = 'users'
+    ShowRecordTypes = [utUnmodified, utModified, utInserted]
+    UpdateMode = umUpdateChanged
+    WhereMode = wmWhereKeyOnly
+    Options = [doCalcDefaults]
+    Left = 117
+    Top = 15
+    object users_tablekey_ind: TIntegerField
+      DisplayWidth = 12
+      FieldName = 'key_ind'
+    end
+    object users_table_nick: TStringField
+      DisplayLabel = #1055#1089#1077#1074#1076#1086#1085#1080#1084
+      DisplayWidth = 25
+      FieldName = 'nick'
+      Required = True
+      Size = 100
+    end
+    object users_table_role_ind: TIntegerField
+      DisplayWidth = 12
+      FieldName = 'role_ind'
+      Required = True
+    end
+    object users_table_password: TStringField
+      DisplayLabel = #1055#1072#1088#1086#1083#1100
+      DisplayWidth = 11
+      FieldName = 'password'
+      Required = True
+      Size = 16
+    end
+    object users_table_fio: TStringField
+      DisplayLabel = #1060#1048#1054
+      DisplayWidth = 22
+      FieldName = 'fio'
+      Size = 100
+    end
+    object users_table_sign_image: TBlobField
+      DisplayLabel = #1048#1079#1086#1073#1088#1072#1078#1077#1085#1080#1077' '#1087#1086#1076#1087#1080#1089#1080
+      DisplayWidth = 23
+      FieldName = 'sign_image'
+    end
+    object users_table_role_caption: TStringField
+      DisplayLabel = #1056#1086#1083#1100
+      DisplayWidth = 36
+      FieldKind = fkLookup
+      FieldName = 'role_caption'
+      LookupDataSet = roles_table
+      LookupKeyFields = 'key_ind'
+      LookupResultField = 'caption'
+      KeyFields = 'role_ind'
+      LookupCache = True
+      Size = 30
+      Lookup = True
+    end
+    object users_table_nick_fio: TStringField
+      DisplayWidth = 72
+      FieldKind = fkCalculated
+      FieldName = 'nick_fio'
+      Size = 60
+      Calculated = True
+    end
+  end
+  object roles_table: TZTable
+    Connection = main_connection
+    RequestLive = False
+    CachedUpdates = False
+    TableName = 'roles'
+    ShowRecordTypes = [utUnmodified, utModified, utInserted]
+    UpdateMode = umUpdateChanged
+    WhereMode = wmWhereKeyOnly
+    Options = [doCalcDefaults]
+    Left = 117
+    Top = 63
+    object roles_tablekey_ind: TIntegerField
+      FieldName = 'key_ind'
+    end
+    object roles_tablecaption: TStringField
+      FieldName = 'caption'
+      Required = True
+      Size = 100
+    end
+    object roles_tabledescription: TBlobField
+      FieldName = 'description'
+    end
+  end
+  object document_pipes_table: TZTable
+    Connection = main_connection
+    RequestLive = True
+    CachedUpdates = False
+    TableName = 'document_pipes'
+    ShowRecordTypes = [utUnmodified, utModified, utInserted]
+    MasterFields = 'key_ind'
+    MasterSource = users_source
+    IndexFieldNames = 'from_user'
+    UpdateMode = umUpdateChanged
+    WhereMode = wmWhereKeyOnly
+    Options = [doCalcDefaults]
+    Left = 117
+    Top = 117
+    object document_pipes_tablekey_ind: TIntegerField
+      DisplayWidth = 12
+      FieldName = 'key_ind'
+    end
+    object document_pipes_tablefrom_user: TIntegerField
+      DisplayWidth = 12
+      FieldName = 'from_user'
+      Required = True
+    end
+    object document_pipes_tableto_user: TIntegerField
+      DisplayWidth = 12
+      FieldName = 'to_user'
+      Required = True
+    end
+    object document_pipes_table_to_user_caption: TStringField
+      DisplayLabel = #1055#1086#1083#1091#1095#1072#1090#1077#1083#1100' '#1076#1086#1082#1091#1084#1077#1085#1090#1086#1074
+      DisplayWidth = 54
+      FieldKind = fkLookup
+      FieldName = 'to_user_caption'
+      LookupDataSet = user_look_table
+      LookupKeyFields = 'key_ind'
+      LookupResultField = 'nick_fio'
+      KeyFields = 'to_user'
+      LookupCache = True
+      Size = 30
+      Lookup = True
+    end
+  end
+  object document_sub_kinds_table: TZTable
+    Connection = main_connection
+    RequestLive = False
+    CachedUpdates = False
+    TableName = 'document_sub_kinds'
+    ShowRecordTypes = [utUnmodified, utModified, utInserted]
+    UpdateMode = umUpdateChanged
+    WhereMode = wmWhereKeyOnly
+    Options = [doCalcDefaults]
+    Left = 108
+    Top = 279
+    object document_sub_kinds_tablekey_ind: TIntegerField
+      FieldName = 'key_ind'
+    end
+    object document_sub_kinds_tablecaption: TStringField
+      FieldName = 'caption'
+      Size = 100
+    end
+    object document_sub_kinds_tabledescription: TBlobField
+      FieldName = 'description'
+    end
+  end
+  object document_pipe_avail_kinds_table: TZTable
+    Connection = main_connection
+    RequestLive = True
+    CachedUpdates = False
+    TableName = 'document_pipe_avail_kinds'
+    ShowRecordTypes = [utUnmodified, utModified, utInserted]
+    MasterFields = 'key_ind'
+    MasterSource = document_pipes_source
+    IndexFieldNames = 'document_pipe_ind'
+    UpdateMode = umUpdateChanged
+    WhereMode = wmWhereKeyOnly
+    Options = [doCalcDefaults]
+    Left = 117
+    Top = 198
+    object document_pipe_avail_kinds_tablekey_ind: TIntegerField
+      FieldName = 'key_ind'
+    end
+    object document_pipe_avail_kinds_tabledocument_pipe_ind: TIntegerField
+      FieldName = 'document_pipe_ind'
+      Required = True
+    end
+    object document_pipe_avail_kinds_tabledocument_sub_kind_ind: TIntegerField
+      FieldName = 'document_sub_kind_ind'
+    end
+    object document_pipe_avail_kinds_table_sub_kind_caption: TStringField
+      DisplayLabel = #1058#1080#1087' '#1076#1086#1082#1091#1084#1077#1085#1090#1072
+      FieldKind = fkLookup
+      FieldName = 'sub_kind_caption'
+      LookupDataSet = document_sub_kinds_table
+      LookupKeyFields = 'key_ind'
+      LookupResultField = 'caption'
+      KeyFields = 'document_sub_kind_ind'
+      LookupCache = True
+      Size = 30
+      Lookup = True
+    end
+  end
+  object users_source: TDataSource
+    DataSet = users_table
+    Left = 201
+    Top = 15
+  end
+  object document_pipes_source: TDataSource
+    DataSet = document_pipes_table
+    Left = 213
+    Top = 135
+  end
+  object document_pipe_avail_kinds_dataSource: TDataSource
+    DataSet = document_pipe_avail_kinds_table
+    Left = 247
+    Top = 213
+  end
+  object user_look_table: TZTable
+    Connection = main_connection
+    OnCalcFields = user_look_tableCalcFields
+    RequestLive = False
+    CachedUpdates = False
+    TableName = 'users'
+    ShowRecordTypes = [utUnmodified, utModified, utInserted]
+    UpdateMode = umUpdateChanged
+    WhereMode = wmWhereKeyOnly
+    Options = [doCalcDefaults]
+    Left = 357
+    Top = 15
+    object user_look_tablekey_ind: TIntegerField
+      FieldName = 'key_ind'
+    end
+    object user_look_tablenick: TStringField
+      FieldName = 'nick'
+      Required = True
+      Size = 100
+    end
+    object user_look_tablerole_ind: TIntegerField
+      FieldName = 'role_ind'
+      Required = True
+    end
+    object user_look_tablenick_fio: TStringField
+      DisplayWidth = 72
+      FieldKind = fkCalculated
+      FieldName = 'nick_fio'
+      Size = 60
+      Calculated = True
+    end
+    object user_look_tablepassword: TStringField
+      FieldName = 'password'
+      Required = True
+      Size = 16
+    end
+    object user_look_tablefio: TStringField
+      FieldName = 'fio'
+      Size = 100
+    end
+    object user_look_tablesign_image: TBlobField
+      FieldName = 'sign_image'
+    end
+  end
+end

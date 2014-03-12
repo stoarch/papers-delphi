@@ -1,0 +1,256 @@
+unit storage_documentAttachment;
+
+interface
+  uses
+    //--[ common ]--
+    classes, windows, sysutils, myAccess,
+    //--[ compress ]--
+    FlexCompress,
+    //--[ constants ]--
+    const_string,
+    //--[ interfaces ]--
+    interface_document,
+    interface_documentAttachment,
+    interface_documentAttachmentStorage,
+    //--[ pools ]--
+    pool_query,
+    //--[ tools ]--
+    tool_GlobalSystem,
+    tool_Environment
+    ;
+
+  type
+    TSQL_DocumentAttachmentStorage = class( TInterfacedObject, IDocumentAttachmentStorage )
+      private
+        m_document : IDocument;
+
+        procedure copy_file(src_file, dst_file: string);
+        procedure clear;
+        procedure delete_temp_documents;
+        function pack_file(file_name: string): string;
+    function add_attachment_in_db(
+      attachment: IDocumentAttachment): boolean;
+      public
+        constructor Create();
+        destructor Destroy();override;
+
+        function add( attachment : IDocumentAttachment ) : boolean;
+       function add_copy( attachment : IDocumentAttachment ) : boolean;
+
+       function get_document() : IDocument;
+
+       procedure set_document( value : IDocument );
+
+       property document : IDocument read get_document write set_document;
+    end;//class
+
+implementation
+
+  uses
+    //--[ common ]--
+    dialogs
+    ;
+{ TSQL_DocumentAttachmentStorage }
+function TSQL_DocumentAttachmentStorage.add_attachment_in_db( attachment : IDocumentAttachment ) : boolean;
+  var
+    work_query : TMyQuery;
+begin
+  result := false;
+  work_query := QueryPool.capture_query();
+  try
+    try
+      work_query.SQL.clear();
+      work_query.SQL.add(
+            'insert into attachments (doc_ind, caption, urn, doc_file) ' +
+            'values (' +
+            IntToStr( m_document.doc_ind ) + ', :caption, :urn, :doc_file' +
+            ')'
+          );
+
+      work_query.Params.ParamByName('caption').Value := attachment.caption;
+      work_query.Params.ParamByName('urn').Value     := attachment.urn;
+      work_query.Params.ParamByName( 'doc_file' ).Value := ExtractFileName( attachment.doc_file );
+
+
+      work_query.Execute();
+    except
+      exit;
+    end;//try-except
+    result := true;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;//function
+
+
+function TSQL_DocumentAttachmentStorage.add(
+  attachment: IDocumentAttachment): boolean;
+  var
+    file_name    : string;
+begin
+  result := false;
+  try
+     if( not add_attachment_in_db( attachment ) )then
+       exit;
+
+    //copy files
+      file_name := pack_file( attachment.doc_file );
+      copy_file( file_name, Environment.get_string( c_ATTACHMENT_DIR ) + ExtractFileName( attachment.doc_file ) + Environment.get_string( c_ATTACHMENT_EXT ) );
+      deleteFile( pchar( file_name ) );
+  except
+    on e:exception do
+    begin
+      raise Exception.create( 'TSQL_DocumentAttachmentStorage.add->' + e.message );
+    end;//on
+  end;//try--except
+
+  result := true;
+end;
+
+procedure TSQL_DocumentAttachmentStorage.copy_file( src_file, dst_file : string );
+begin
+  try
+    if( not CopyFile( pchar( src_file ), pchar( dst_file ), false ) )then
+    begin
+      sShowMessage( SysErrorMessage(GetLastError()) );
+    end;//if
+  except
+    on e:exception do
+    begin
+      raise Exception.create( 'TSQL_DocumentAttachmentStorage.copy_file->' + e.Message );
+    end;//on
+  end;//try--except
+end;//proc
+
+
+
+
+constructor TSQL_DocumentAttachmentStorage.Create;
+begin
+end;
+
+destructor TSQL_DocumentAttachmentStorage.Destroy;
+begin
+  delete_temp_documents();
+
+  inherited;
+end;
+
+procedure TSQL_DocumentAttachmentStorage.clear();
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    work_query.sql.clear();
+    work_query.sql.add(
+      'delete from attachments where doc_ind = ' + IntToStr( m_document.doc_ind )
+    );
+    work_query.Execute();
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+procedure TSQL_DocumentAttachmentStorage.delete_temp_documents();
+  var
+    path : string;
+    sr   : TSearchRec;
+begin
+ try
+    path := GlobalSystem.get_temp_path() + '\' + c_documents_folder;
+
+    if( FindFirst( path + '\*.*' , faAnyFile, sr ) <> 0 )then
+      exit;
+
+    try
+      while( FindNext( sr ) = 0 )do
+      begin
+        if( sr.name = '..' )then continue;
+
+        DeleteFile( pchar( path + '\' + sr.Name ) );
+      end;//while
+    finally
+      FindClose( sr );
+    end;//try--finally
+ except
+   on e: exception do
+     raise Exception.Create( 'TSQL_DocumentAttachmentStorage.delete_temp_documents->' + e.Message );
+ end;//try--except
+end;
+
+
+function TSQL_DocumentAttachmentStorage.pack_file( file_name : string ) : string;
+  var
+   temp_dir : string;
+   acompressor  : TFlexCompress;
+begin
+  try
+    temp_dir := GlobalSystem.get_temp_path();
+    if( temp_dir = '' )then exit;
+
+    result := GlobalSystem.get_temp_file();
+
+    acompressor := Environment.get_object( c_COMPRESSOR ) as TFlexCompress;
+
+
+    acompressor.FileName := result;
+
+    acompressor.Password := Environment.get_string( c_GLOBAL_PASS );
+    //todo: implement password for any user role
+
+          // Create a new archive file
+    acompressor.OpenArchive(fmCreate);
+
+          // Start a transaction
+    acompressor.BeginUpdate;
+
+          // Set path to folder with some HTML files to BaseDir
+    acompressor.BaseDir := temp_dir;
+
+    // Add all files from Source folder to the archive
+    try
+      acompressor.Options.StorePath := spNoPath;
+
+      acompressor.AddFiles( file_name );
+    except
+      on e:exception do
+      begin
+        // If errors occurs rollback transaction. All modifications will be cancelled.
+        acompressor.CancelUpdate;
+
+        // Close archive and exit current procedure
+        acompressor.CloseArchive;
+        raise Exception.Create(e.message);
+      end;
+    end;
+
+     // Commit a transaction. All modifications will be saved.
+    acompressor.EndUpdate;
+    acompressor.CloseArchive();
+  except
+      on e:exception do
+      begin
+        raise Exception.Create( 'TSQL_DocumentAttachmentStorage.pack_file->' + e.message);
+      end;
+  end;//try--except
+end;//func
+
+function TSQL_DocumentAttachmentStorage.get_document: IDocument;
+begin
+  result := m_document;
+end;
+
+
+procedure TSQL_DocumentAttachmentStorage.set_document(value: IDocument);
+begin
+  m_document := value;
+end;
+
+function TSQL_DocumentAttachmentStorage.add_copy(
+  attachment: IDocumentAttachment): boolean;
+begin
+  result := add_attachment_in_db( attachment );
+end;
+
+end.

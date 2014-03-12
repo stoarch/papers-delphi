@@ -1,0 +1,87 @@
+unit loader_factoryUser;
+
+interface
+  uses
+    //--[ common ]--
+    sysUtils, myAccess,
+    //--[ constants ]--
+    const_factoryUserData,
+    //--[ interfaces ]--
+    interface_factoryUserData,
+    interface_userInfo,
+    interface_userData,
+    interface_userDataLoader,
+    //--[ factories ]--
+    factory_users,
+    //--[ loaders ]--
+    loader_userData,
+    //--[ pools ]--
+    pool_query
+    ;
+
+  type
+    TFactoryUserDataLoader = class( TUserDataLoader, IUserDataLoader )
+    protected
+      function make_user_info() : IUserInfo;override;
+      function FillUserData_fromQuery( query : TMyQuery ): IUserInfo;override;
+    end;//class
+
+implementation
+
+{ TFactoryUserDataLoader }
+
+function TFactoryUserDataLoader.FillUserData_fromQuery( query : TMyQuery ): IUserInfo;
+  var
+    work_query : TMyQuery;
+    s_user_ind : string;
+begin
+  result := inherited FillUserData_fromQuery( query );
+
+  s_user_ind := IntToStr( result.user_index );
+
+  work_query := QueryPool.capture_query();
+  try
+    //get dept info
+    work_query.sql.clear();
+    work_query.sql.add(
+     'select dept_id from user_additional_info ' +
+     ' where ' +
+     ' user_ind = ' + s_user_ind
+    );
+    work_query.open();
+
+    assert( ( not work_query.eof )and( work_query.recordCount = 1 ), 'In db must be one record of dept for this user' );
+
+    with result as IFactoryUserData do
+    begin
+      dept_id := work_query.fieldByName( 'dept_id' ).asInteger;
+    end;//with
+
+    //get accessible system roles
+    work_query.sql.clear();
+    work_query.sql.add(
+      'select * from user_system_roles '+
+      ' where '+
+      ' user_ind = ' + s_user_ind
+    );
+    work_query.open();
+
+    while not work_query.eof do
+    with result as IFactoryUserData do
+     begin
+       add_system_role( work_query.fieldByName( 'system_role_ind' ).asInteger );
+
+       work_query.next();
+     end;//while
+  finally
+    QueryPool.release_query( work_query );
+  end;//try--finally
+end;
+
+function TFactoryUserDataLoader.make_user_info: IUserInfo;
+begin
+  result := users_factory.createInstance( CLSID_FactoryUserData, IID_IFactoryUserData ) as IFactoryUserData;
+end;
+
+end.
+ 

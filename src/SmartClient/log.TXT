@@ -1,0 +1,86 @@
+0.04:163 0000055C GetModuleHandleA
+				Terminal.exe + 0390h
+				Terminal.exe + 0A3D37h
+0.04:163 0000055C     lpModuleName:nil
+0.04:163 0000055C        Result : 400000h 
+0.10:151 0000055C WSAStartup
+				Terminal.exe + 0A1B4Fh
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A27B3h
+				Terminal.exe + 0A23E6h
+				Terminal.exe + 0A2352h
+				Terminal.exe + 0A3E14h
+0.10:151 0000055C     wVersionRequired:101h 
+0.10:151 0000055C     WSData:12FD18h 
+0.10:151 0000055C        Result : 0h 
+0.10:151 0000055C gethostname
+				Terminal.exe + 0A1B6Eh
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A27B3h
+				Terminal.exe + 0A23E6h
+				Terminal.exe + 0A2352h
+				Terminal.exe + 0A3E14h
+0.10:151 0000055C     name:12FC18h 
+0.10:151 0000055C     len:256 
+0.10:159 0000055C        Result : 0h 
+0.10:159 0000055C     name:satpc
+0.10:159 0000055C gethostbyname
+				Terminal.exe + 0A1B7Ah
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A27B3h
+				Terminal.exe + 0A23E6h
+				Terminal.exe + 0A2352h
+				Terminal.exe + 0A3E14h
+0.10:159 0000055C     name:satpc
+0.10:189 0000055C        Result : 1AB568h 
+0.10:189 0000055C WSACleanup
+				Terminal.exe + 0A1C48h
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A27B3h
+				Terminal.exe + 0A23E6h
+				Terminal.exe + 0A2352h
+				Terminal.exe + 0A3E14h
+0.10:189 0000055C        Result : 0h 
+0.11:907 000006C8 RaiseException
+				Terminal.exe + 0972ABh
+				Terminal.exe + 097056h
+0.11:907 000006C8     dwExceptionCode:406D1388h 
+0.11:907 000006C8     dwExceptionFlags:0h 
+0.11:907 000006C8     nNumberOfArguments:4h 
+0.11:907 000006C8     lpArguments:4F0FF50h 
+0.12:007 000006C8 Sleep
+				Terminal.exe + 097084h
+0.12:007 000006C8     dwMilliseconds:1388h 
+0.17:030 000006C8 Sleep
+				Terminal.exe + 097084h
+0.17:030 000006C8     dwMilliseconds:1388h 
+0.17:704 0000055C WSAStartup
+				Terminal.exe + 0A1B4Fh
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A3002h
+				Terminal.exe + 0A3E20h
+0.17:704 0000055C     wVersionRequired:101h 
+0.17:704 0000055C     WSData:12F9F8h 
+0.17:705 0000055C        Result : 0h 
+0.17:705 0000055C gethostname
+				Terminal.exe + 0A1B6Eh
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A3002h
+				Terminal.exe + 0A3E20h
+0.17:705 0000055C     name:12F8F8h 
+0.17:705 0000055C     len:256 
+0.17:713 0000055C        Result : 0h 
+0.17:713 0000055C     name:satpc
+0.17:713 0000055C gethostbyname
+				Terminal.exe + 0A1B7Ah
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A3002h
+				Terminal.exe + 0A3E20h
+0.17:713 0000055C     name:satpc
+0.17:742 0000055C        Result : 1AB568h 
+0.17:742 0000055C WSACleanup
+				Terminal.exe + 0A1C48h
+				Terminal.exe + 0A1CEBh
+				Terminal.exe + 0A3002h
+				Terminal.exe + 0A3E20h
+0.17:742 0000055C        Result : 0h 

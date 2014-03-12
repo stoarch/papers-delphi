@@ -1,0 +1,19 @@
+unit list_departmentList;
+
+interface
+   uses
+     //--[ common ]--
+     classes,
+     //--[ interfaces ]--
+     interface_department,
+     interface_departmentList
+     ;
+
+   type
+     TDepartmentList = class( TInterfaceList, IDepartmentList )
+     end;//class
+
+implementation
+
+end.
+ 

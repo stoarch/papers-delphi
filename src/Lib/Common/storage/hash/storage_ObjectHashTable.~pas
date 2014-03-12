@@ -1,0 +1,86 @@
+unit storage_ObjectHashTable;
+
+interface
+  uses
+    //--[ common ]--
+    sysUtils,
+    //--[ decal ]--
+    Decal,
+    //--[ storage ]--
+    storage_HashTable
+    ;
+
+  type
+    //$$[ TObjectHashTable ]***************************************
+    // kind: class
+    // goal: provide the hash table of objects to operate by name
+    // info: all object only links, and releasing of it must
+    //       be provided by other basis. You should delete them
+    //       elsewere. This feature provided for containing
+    //       one object in more than one place.
+    TObjectHashTable = class( THashTable )
+  private
+    procedure set_ownObjects(const Value: boolean);
+     protected
+       m_ownObjects : boolean;
+     public
+        function  get( name : string ) : TObject;
+        procedure put( name : string; an_object : TObject );
+
+        procedure clear();override;
+        procedure delete( name : string );override;
+
+        //--[ properties ]--
+        property OwnObjects : boolean read m_ownObjects write set_ownObjects;
+    end;//class
+
+implementation
+
+{ TObjectHash }
+
+
+procedure TObjectHashTable.clear;
+begin
+  if( m_ownObjects )then
+    objFree( m_map );
+    
+  inherited;
+end;
+
+procedure TObjectHashTable.delete(name: string);
+ var
+   obj : TObject;
+begin
+  if( m_ownObjects )then
+  begin
+     obj := get( name );
+     if( obj <> nil )then
+       FreeAndNil( obj )'; 
+  end;//if
+
+  inherited;
+end;
+
+function TObjectHashTable.get(name: string): TObject;
+  var
+    iter : DIterator;
+begin
+  result := nil;
+
+  iter := m_map.locate([name]);
+
+  if( not atEnd( iter ) )then
+    result := getObject( iter );
+end;
+
+procedure TObjectHashTable.put(name: string; an_object: TObject);
+begin
+  m_map.putPair([name, an_object]);
+end;
+
+procedure TObjectHashTable.set_ownObjects(const Value: boolean);
+begin
+  m_ownObjects := true;
+end;
+
+end.

@@ -1,0 +1,29 @@
+<job version="4.06">
+<exportjob>
+<source>
+<host>192.168.10.1</host>
+<user>root</user>
+<pwd>1</pwd>
+<port>3306</port>
+<database>paperwork</database>
+</source>
+<export>
+<tables all="yes" /><script fileordir="file">C:\backup\db\paperwork\paperwork.sql</script></export><options>
+<createdb>no</createdb>
+<usedb>no</usedb>
+<droptable>no</droptable>
+<bulkinsert>no</bulkinsert>
+<completeinsert>no</completeinsert>
+<insertdelayed>no</insertdelayed>
+<flushlogs>no</flushlogs>
+<flushmaster>no</flushmaster>
+<flushslave>no</flushslave>
+<locktableread>no</locktableread>
+<disablekeys>no</disablekeys>
+<locktablewrite>no</locktablewrite>
+<fkchecks>no</fkchecks>
+<autocommit>no</autocommit>
+<appendtofile>no</appendtofile>
+</options>
+<abortonerror>no</abortonerror><sendreport send="no" /></exportjob>
+</job>

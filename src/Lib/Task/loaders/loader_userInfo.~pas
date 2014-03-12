@@ -1,0 +1,104 @@
+unit loader_userInfo;
+
+interface
+  uses
+    //--[ class factories ]--
+    paperwork_classFactory,
+    //--[ common ]--
+    classes, sysUtils, zDataset,
+    //--[ constants ]--
+    const_string,
+    const_UserInfo,
+    //--[ interfaces ]--
+    interface_userInfo,
+    interface_userInfoLoader,
+    //--[ factories ]--
+    factory_users,
+    //--[ pools ]--
+    pool_query,
+    //--[ storages ]--
+    storage_interfaceHashTable,
+    //--[ tools ]--
+    tool_Environment,
+    //--[ types ]--
+    type_userInfo
+    ;
+
+  type
+    TUserInfoLoader = class( TInterfacedObject, IUserInfoLoader )
+    protected
+      Fdata     : IUserInfo;
+      FusersCache : TInterfaceHashTable;
+
+      function make_user_info() : IUserInfo;virtual;
+      function FillUserData_fromQuery( query : TZQuery ): IUserInfo;virtual;
+    public
+       constructor Create();
+       destructor Destroy();override;
+
+       function execute( userInd : integer ) : IUserInfo;      overload;
+    end;//class
+implementation
+
+{ TUserInfoLoader }
+
+constructor TUserInfoLoader.Create;
+begin
+  inherited;
+  FusersCache := TInterfaceHashTable.Create();
+end;
+
+destructor TUserInfoLoader.Destroy;
+begin
+  FreeAndNil( FusersCache );
+  Fdata := nil;
+
+  inherited;
+end;
+
+function TUserInfoLoader.execute(userInd: integer): IUserInfo;
+  var
+    query : TZQuery;
+begin
+  result := nil;
+
+  query := QueryPool.capture_query();
+  try
+    result := FusersCache.get(IntToStr(userInd)) as IUserInfo;
+    if( result = nil )then
+    begin
+        //find user by nick name
+      query.SQL.Clear();
+      query.SQL.Add( 'select * from paperwork.users where ' +
+                     'key_ind = "' + IntToStr( userInd ) + '" '
+                   );
+      query.Open();
+
+      result := FillUserData_fromQuery( query );
+      FusersCache.put( IntToStr(userInd), result );
+    end;//if
+  finally
+    QueryPool.release_query( query );
+  end;//try-finally
+end;
+
+function TUserInfoLoader.FillUserData_fromQuery( query : TZQuery ): IUserInfo;
+begin
+  Fdata := make_user_info;
+
+  with query do
+  begin
+    Fdata.user_index := fieldByName( 'key_ind' ).asInteger;
+    Fdata.role       := TUserRole( fieldByName( 'role_ind' ).asInteger );
+    Fdata.fio        := fieldByName( 'fio' ).asString;
+  end;
+
+  result := fdata;
+end;
+
+function TUserInfoLoader.make_user_info: IUserInfo;
+begin
+  result := users_factory.createInstance( CLSID_UserInfo, IID_IUserInfo ) as IUserInfo;
+end;
+
+end.

@@ -1,0 +1,357 @@
+unit loader_documentsList;
+
+interface
+  uses
+    //--[ class factories ]--
+    paperwork_classFactory,
+    //--[ common ]--
+    classes, dialogs, sysutils, math, windows, jclSysUtils,
+    myAccess,
+    //--[ constants ]--
+    const_document,
+    const_documentAttachmentListLoader,
+    const_string,
+    const_userInfo,
+    const_userInfoLoader,
+    //--[ interfaces ]--
+    interface_document,
+    interface_documentAttachment,
+    interface_documentAttachmentList_Loader,
+    interface_documentList,
+    interface_documentListLoader,
+    interface_IProgressDisplayer,
+    interface_userInfo,
+    interface_userInfoLoader,
+    //--[ factories ]--
+    factory_documents,
+    factory_users,
+    //--[ pools ]--
+    pool_query,
+    //--[ storage ]--
+    storage_interfaceHashTable,
+    //--[ tools ]--
+    DeCal,
+    tool_Environment,
+    //--[ types ]--
+    type_DocumentInfo
+    ;
+
+  type
+    TSQL_DocumentListLoader = class( TInterfacedObject, IDocumentListLoader )
+     private
+      Fuser_info_loader : IUserInfoLoader;
+      m_progress_displayer : IProgressDisplayer;
+      m_docs_cache         : TInterfaceHashTable;
+
+      procedure fill_document_from_query(document: IDocument; work_query :  TMyQuery);
+      procedure load_attachments_for(document_list: IDocumentList);
+      function get_user_name(user_id: integer): string;
+      function get_user_role(user_id: integer): string;
+      function decompress(content: string): string;
+      function get_document_is_readen(user_id, doc_id: integer): boolean;
+      function load_user_for(userIndex: integer) : IUserInfo;
+      procedure set_progress(current, total: integer);
+   public
+      constructor Create();
+      destructor  Destroy();override;
+
+      function load( document_list : IDocumentList;
+                     kind : TDocumentKind;
+                     to_user,
+                     from_user,
+                     owner_user : integer
+                   ) : boolean;
+
+      procedure setProgressDisplayer( displayer : IProgressDisplayer );
+    end;//class
+
+implementation
+   uses
+     //--[ string processing ]--
+     jclMime,
+     //--[ compress ]--
+     jclZlib
+     ;
+
+{ TSQL_DocumentListLoader }
+
+function TSQL_DocumentListLoader.decompress( content : string ): string ;
+begin
+  result := MimeDecodeString( content );
+end;
+
+function TSQL_DocumentListLoader.load_user_for( userIndex : integer ) : IUserInfo;
+begin
+  result := Fuser_info_loader.execute( userIndex );
+end;
+
+procedure TSQL_DocumentListLoader.fill_document_from_query( document : IDocument; work_query :  TMyQuery );
+begin
+    document.doc_ind        := work_query.FieldByName( 'key_ind' ).asInteger;
+
+    document.caption      := work_query.FieldByName( 'caption' ).AsString;
+    document.content      := Decompress( work_query.FieldByName( 'content' ).AsString );
+
+    document.make_date    := work_query.FieldByName( 'make_date' ).AsDateTime;
+    document.kind         := TDocumentKind( work_query.FieldByName( 'doc_kind' ).AsInteger );
+    document.document_kind := TDocumentSubKind( work_query.FieldByName( 'doc_sub_kind' ).AsInteger );
+
+    document.flag           := TDocumentFlag( work_query.FieldByName( 'flag' ).asInteger );
+
+
+    document.state          := TDocumentState( work_query.fieldByName( 'doc_state' ).asInteger );
+
+    document.owner_id       := work_query.FieldByName( 'owner_id' ).asInteger;
+
+    document.to_user.user_index := work_query.FieldByName( 'to_user' ).asInteger;
+    document.from_user.user_index := work_query.FieldByName( 'from_user' ).asInteger;
+
+    document.pipe_ind       := work_query.FieldByName( 'pipe_ind' ).asInteger;
+
+    document.send_date      := work_query.FieldByName( 'send_date' ).asDateTime;
+    document.answer_date    := work_query.FieldByName( 'answer_date' ).asDateTime;
+end;
+
+
+
+//$$[ load ]$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+// goal: load the document list for specific kind and users info
+// parms:
+//   documents - list of documents for fillin
+//   kind      - which kind of document to load
+//   to_user   - to which user need to load the documents
+//      (0 - if all users can see this document)
+//   from_user - from which user need to load
+//      (0 - if document is globaly created)
+//   owner_user- which owner of this document
+//      (0 - if specific document is for communication)
+function TSQL_DocumentListLoader.load( document_list : IDocumentList;
+                     kind : TDocumentKind;
+                     to_user,
+                     from_user,
+                     owner_user : integer
+                   ) : boolean;
+  var
+    document   : IDocument;
+    i          : integer;
+    STEP       : integer;
+    s_doc_ind  : string;
+    intf       : IInterface;
+    work_query : TMyQuery;
+begin
+  result := false;
+
+  document_list.clear();
+
+  work_query := QueryPool.capture_query();
+
+  try
+    work_query.Sql.Clear();
+    work_query.Sql.Add(
+        'select * from paperwork.documents '                 +
+        ' where doc_kind = ' + IntToStr( Ord( kind ) )       +
+        '   and ( '                                          +
+        '          to_user = ' + intToStr( to_user )         +
+        '          or from_user = ' + intToStr( from_user )  +
+        '        )'                                          +
+        '   and owner_id = ' + intToStr( owner_user )        +
+        ' order by '+
+        iff( kind = DOCUMENT_KIND_INTERNAL_DB_ID,
+             ' make_date desc ',
+             iff( kind = DOCUMENT_KIND_COMMUNICATION_DB_ID,
+                  ' send_date desc ',
+                  ' '
+                )
+          )  + ', ' +
+        ' from_user asc'
+    );
+
+
+    work_query.Open();
+    if( work_query.eof ) then exit;
+
+    STEP := max( work_query.RecordCount div 100, 1 );
+    set_progress( 0, 100 );
+    i    := 0;
+
+    while not work_query.Eof do
+    begin
+        s_doc_ind := work_query.FieldByName( 'key_ind' ).asString;
+
+        intf := m_docs_cache.get( s_doc_ind );
+        document := intf as IDocument;
+        if document = nil then
+         begin
+          document := documents_factory.createInstance( CLSID_DOCUMENT, IID_IDocument ) as IDocument;
+
+          fill_document_from_query( document, work_query );
+         end;//if
+
+        document_list.add( document );
+
+        work_query.Next();
+
+        inc( i );
+        if( i mod STEP = 0 )then
+          set_progress( i div STEP, 100 );
+    end;//while
+
+    //and fill the user name for documents (not need to handle more queries, than have
+    for i := 0 to document_list.count - 1 do
+    begin
+      s_doc_ind := IntToStr( document_list.Documents[ i ].doc_ind );
+
+      document := m_docs_cache.get( s_doc_ind ) as IDocument;
+
+      if( document = nil )then
+      begin
+        document := document_list.Documents[ i ];
+
+        document.isReaden       := get_document_is_readen( document.to_user.user_index, document.doc_ind );
+
+        document.to_user        := load_user_for( document.to_user.user_index );
+        document.from_user      := load_user_for( document.from_user.user_index );
+        m_docs_cache.put( s_doc_ind, document );
+      end;//if
+    end;//for
+
+    load_attachments_for( document_list );
+
+    document := nil;
+    intf     := nil;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+
+  result := true;
+end;
+
+
+
+
+
+function TSQL_DocumentListLoader.get_document_is_readen( user_id, doc_id : integer ):boolean;
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    work_query.sql.clear();
+    work_query.sql.add(
+      'select * from doc_status ' +
+      ' where user_ind = ' + IntToStr( user_id ) +
+      '  and  doc_ind  = ' + IntToStr( doc_id )
+    );
+    work_query.open();
+
+    result := work_query.FieldByName('status').asInteger = 1;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+function TSQL_DocumentListLoader.get_user_name(user_id: integer): string;
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    result := 'Анонимный';
+
+    work_query.sql.clear();
+    work_query.sql.Add(
+      'select users.fio as name from users where ' +
+      ' users.key_ind = ' + IntToStr( user_id )
+    );
+    work_query.open();
+
+    if( work_query.eof )then exit;
+
+    result := work_query.fieldByName( 'name' ).asString;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+
+procedure TSQL_DocumentListLoader.load_attachments_for( document_list : IDocumentList );
+  var
+    i : integer;
+    document : IDocument;
+    attachments_loader   : IDocumentAttachmentList_Loader;
+begin
+  attachments_loader :=
+         documents_factory.createInstance(
+             CLSID_DocumentAttachmentListLoader,
+             IID_IDocumentAttachmentList_Loader
+            )
+              as IDocumentAttachmentList_Loader;
+
+  for i := 0 to document_list.Count - 1 do
+  begin
+    document := m_docs_cache.get( IntToStr( document_list.Documents[ i ].doc_ind ) ) as IDocument;
+    if( document <> nil )then
+    begin
+      document := document_list.Documents[ i ];
+
+      attachments_loader.load( document );
+    end;//if
+  end;//for
+end;//proc
+
+
+
+function TSQL_DocumentListLoader.get_user_role(user_id: integer): string;
+  var
+    work_query : TMyQuery;
+begin
+  work_query := QueryPool.capture_query();
+  try
+    result := '???';
+
+    work_query.sql.clear();
+    work_query.sql.Add(
+      'select roles.caption as name from users, roles where ' +
+      ' users.role_ind = roles.key_ind ' +
+      ' and users.key_ind = ' + IntToStr( user_id )
+    );
+    work_query.open();
+
+    if( work_query.eof )then exit;
+
+    result := work_query.fieldByName( 'name' ).asString;
+  finally
+    QueryPool.release_query( work_query );
+  end;//try-finally
+end;
+
+constructor TSQL_DocumentListLoader.Create;
+begin
+  Fuser_info_loader := users_factory.createInstance( CLSID_UserInfoLoader, IID_IUserInfoLoader ) as IUserInfoLoader;
+  m_docs_cache      := TInterfaceHashTable.create();
+end;
+
+destructor TSQL_DocumentListLoader.Destroy;
+begin
+  FreeAndNil( m_docs_cache );
+  
+  Fuser_info_loader := nil;
+  m_progress_displayer := nil;
+
+  inherited;
+end;
+
+procedure TSQL_DocumentListLoader.set_progress( current, total : integer );
+begin
+  if m_progress_displayer = nil then exit;
+
+  m_progress_displayer.setSubTaskProgress( current, total );
+end;//proc
+
+procedure TSQL_DocumentListLoader.setProgressDisplayer(
+  displayer: IProgressDisplayer);
+begin
+  m_progress_displayer := displayer;
+end;
+
+end.

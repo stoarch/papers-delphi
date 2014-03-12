@@ -1,0 +1,109 @@
+unit tool_Settings;
+
+interface
+  type
+    //$$[ Settings ]##############################################
+    // kind: class utility
+    // goal: provide the work with settings of project in
+    //       centralized order
+    // protocol:
+    //  1. initialization
+    //    a. initialize the settings to speicified file name (initialize)
+    //    b. connect to settings file (connect)
+    //  2. working with
+    //    a. use get_xxx, or set_xxx - to retreive, store values from
+    //       settings (where xxx - one of followed types: string, integer, boolean)
+    //  3. finalization
+    //    a. disconnect settings from file (disconnect)
+    //    b. finalize the settings (finalize)
+    //
+    // info:
+    //   1. if you lost finalization of settings, it will closed
+    //      automatically at end of program execution
+    Settings = class
+    public
+      class procedure initialize( fileName : string );
+      class procedure finalize();
+
+      class procedure connect();
+      class procedure disconnect();
+
+      class function get_boolean( item, section : string ) : boolean;
+      class function get_integer( item, section : string ) : integer;
+      class function get_string( item, section : string ) : string;
+    end;//class
+
+implementation
+  uses
+    //--[ common ]--
+    iniFiles, dialogs
+    ;
+
+  var
+    g_iniFile : TMemIniFile;
+    g_fileName : string;
+
+{ Settings }
+
+class procedure Settings.connect;
+begin
+  assert( g_fileName <> '', 'initialize() must be called prior.' );
+  assert( g_iniFile = nil, 'Unable to connect more than once to file. Use disconnect' );
+
+  g_iniFile := TMemIniFile.Create( g_fileName );
+end;
+
+class procedure Settings.disconnect;
+begin
+  assert( g_iniFile <> nil, 'Nothing to disconnect. Initialize,Connect must be called first');
+
+  if g_iniFile = nil then
+    exit;
+
+  g_iniFile.updateFile();
+  g_iniFile.Free();
+  g_iniFile := nil;
+end;
+
+class procedure Settings.finalize;
+begin
+  //do nothing in this version.
+  //:: in later versions must clean the memory
+end;
+
+class function Settings.get_boolean(item, section: string): boolean;
+begin
+  assert( g_iniFile <> nil, 'Initialize and connect must be called first' );
+
+  result := g_iniFile.ReadBool( section, item, false );
+end;
+
+class function Settings.get_integer(item, section: string): integer;
+begin
+  assert( g_iniFile <> nil, 'Initialize and connect must be called first' );
+
+  result := g_iniFile.ReadInteger( section, item, 0 );
+end;
+
+class function Settings.get_string(item, section: string): string;
+begin
+  assert( g_iniFile <> nil, 'Initialize and connect must be called first' );
+
+  result := g_iniFile.ReadString(section, item, '' );
+end;
+
+class procedure Settings.initialize(fileName: string);
+begin
+  g_fileName := fileName;
+end;
+
+initialization
+  g_iniFile := nil;
+
+finalization
+  settings.disconnect();
+  settings.finalize();
+
+  g_iniFile.Free;
+  g_iniFile := nil;
+end.

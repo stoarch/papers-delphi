@@ -1,0 +1,30 @@
+unit interface_documentListLoader;
+
+interface
+  uses
+    //--[ interfaces ]--
+    interface_documentList,
+    interface_progressDisplayer,
+    //--[ types ]--
+    type_DocumentInfo
+    ;
+
+  const
+    IID_IDocumentListLoader : TGUID = '{E0EC425E-45A9-4772-BC15-6F9B66279E87}';
+
+
+  type
+    IDocumentListLoader = interface
+                          ['{E0EC425E-45A9-4772-BC15-6F9B66279E87}']
+      function load( document_list : IDocumentList;
+                     kind : TDocumentKind;
+                     to_user,
+                     from_user,
+                     owner_user : integer
+                   ) : boolean;
+
+      procedure setProgressDisplayer( displayer : IProgressDisplayer );
+    end;//interface
+implementation
+
+end.

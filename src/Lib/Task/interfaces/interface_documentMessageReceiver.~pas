@@ -1,0 +1,21 @@
+unit interface_documentMessageReceiver;
+
+interface
+  uses
+    //--[ interfaces ]--
+    interface_documentMessage,
+    interface_messageReceiver
+    ;
+
+  const
+    IID_IDocumentMessageReceiver : TGUID = '{43EB03DE-9207-40FD-9C98-5DE6F977EBF3}';
+
+  type
+    IDocumentMessageReceiver = interface( IMessageReceiver )
+                               ['{43EB03DE-9207-40FD-9C98-5DE6F977EBF3}']
+    end;//interface
+
+implementation
+
+end.
+ 

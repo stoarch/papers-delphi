@@ -1,0 +1,106 @@
+unit Form_ProgressDisplayer;
+
+interface
+
+uses
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, Form_Skined, bsSkinCtrls, StdCtrls, BusinessSkinForm,
+  bsSkinData,
+  //-- interfaces --
+  interface_IProgressDisplayer, sGauge, sLabel, sSkinProvider;
+
+type
+  TProgressDisplayer = class(TSkinedForm, IProgressDisplayer)
+    sLabel1: TsLabel;
+    sLabel2: TsLabel;
+    task_status_label: TsLabel;
+    task_gauge: TsGauge;
+    subtask_gauge: TsGauge;
+    subtask_status_label: TsLabel;
+  private
+    { Private declarations }
+    m_callback : TProgressCancelationProcedure;
+
+    procedure show_progress;
+    procedure hide_progress;
+  public
+    { Public declarations }
+    procedure setSkinData( data : TBsSkinData );override;
+
+    //-- IProgressDisplayer --
+      procedure setTaskCaption( caption : string );
+      procedure setTaskProgress( current, total : integer );
+      procedure setSubTaskCaption( caption : string );
+      procedure setSubTaskProgress( current, total : integer );
+
+      procedure setCancelCallback( callback : TProgressCancelationProcedure );
+
+      procedure IProgressDisplayer.show = show_progress;
+      procedure IProgressDisplayer.hide = hide_progress;
+  end;
+
+var
+  ProgressDisplayer: TProgressDisplayer;
+
+implementation
+
+{$R *.dfm}
+
+{ TProgressDisplayer }
+
+procedure TProgressDisplayer.hide_progress;
+begin
+  hide;
+end;
+
+procedure TProgressDisplayer.setCancelCallback(
+  callback: TProgressCancelationProcedure);
+begin
+  m_callback := callback;
+end;
+
+procedure TProgressDisplayer.setSkinData(data: TBsSkinData);
+begin
+  inherited;
+
+  task_caption_label.SkinData := data;
+  task_status_label.SkinData  := data;
+  task_gauge.SkinData         := data;
+  subtask_caption_label.SkinData := data;
+  subtask_status_label.SkinData  := data;
+  subtask_gauge.SkinData         := data;
+  cancel_button.SkinData         := data;
+end;
+
+procedure TProgressDisplayer.setSubTaskCaption(caption: string);
+begin
+  subtask_status_label.Caption := caption;
+  Application.ProcessMessages();
+end;
+
+procedure TProgressDisplayer.setSubTaskProgress(current, total: integer);
+begin
+  if( total = 0 )then exit;
+  
+  subtask_gauge.Value := trunc( current / total )*100;
+end;
+
+procedure TProgressDisplayer.setTaskCaption(caption: string);
+begin
+  task_status_label.Caption := caption;
+  Application.ProcessMessages();
+end;
+
+procedure TProgressDisplayer.setTaskProgress(current, total: integer);
+begin
+  if( total = 0 )then exit;
+
+  task_gauge.Value := trunc( current / total )*100;
+end;
+
+procedure TProgressDisplayer.show_progress;
+begin
+  show();
+end;
+
+end.
